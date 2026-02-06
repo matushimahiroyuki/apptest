@@ -1,0 +1,7 @@
+{
+  "name": "Slow Life Shopping List",
+  "description": "A dual-location shopping list manager for 'Slow Life 1' and 'Slow Life 2' featuring voice input and a master item history.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
