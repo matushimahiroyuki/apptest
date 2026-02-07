@@ -108,12 +108,25 @@ const ShoppingListView: React.FC<Props> = ({
       recognition.lang = 'ja-JP';
       recognition.interimResults = false;
 
-      recognition.onstart = () => setIsListening(true);
-      recognition.onend = () => setIsListening(false);
-      recognition.onerror = () => setIsListening(false);
+      recognition.onstart = () => {
+        setIsListening(true);
+        console.log("Speech recognition started");
+      };
+      recognition.onend = () => {
+        setIsListening(false);
+        console.log("Speech recognition ended");
+      };
+      recognition.onerror = (event: any) => {
+        console.error("Speech Recognition Error:", event.error);
+        setIsListening(false);
+        if (event.error === 'not-allowed') {
+          alert("マイクの使用が許可されていません。ブラウザの設定でマイクをONにしてください。");
+        }
+      };
 
       recognition.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
+        console.log("Speech result:", transcript);
         setInputValue(transcript);
         setIsListening(false);
       };
@@ -127,21 +140,17 @@ const ShoppingListView: React.FC<Props> = ({
     e.stopPropagation();
 
     if (!recognitionRef.current) {
-      alert('音声入力に対応していません');
+      alert('お使いのブラウザは音声入力に対応していません。iPhoneの方はSafari、それ以外の方はChromeをお使いください。');
       return;
     }
 
     if (isListening) {
-      try {
-        recognitionRef.current.stop();
-      } catch (err) {
-        console.error("Speech stop error:", err);
-      }
+      recognitionRef.current.stop();
     } else {
       try {
         recognitionRef.current.start();
       } catch (err) {
-        console.error("Speech start error:", err);
+        console.error("Start error:", err);
         setIsListening(false);
       }
     }
@@ -154,11 +163,14 @@ const ShoppingListView: React.FC<Props> = ({
     setAiSuggestions([]);
     
     try {
-      if (!process.env.API_KEY) {
-        throw new Error("APIキーが設定されていません。Vercelの環境変数を確認してください。");
+      // 厳密に process.env.API_KEY を参照
+      const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
+      
+      if (!apiKey || apiKey === "ここに貼り付け") {
+        throw new Error("APIキーがプログラムに認識されていません。\n\n【解決策】\n1. Vercelの環境変数を設定済みなら、一度「再デプロイ (Redeploy)」を実行してください。\n2. 設定名が 'API_KEY' であることを確認してください。");
       }
 
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `料理名「${inputValue}」を作るために、一般的なスーパーで購入が必要な食材リストを教えてください。`,
@@ -185,14 +197,13 @@ const ShoppingListView: React.FC<Props> = ({
       });
 
       const responseText = response.text || '';
-      // AIがMarkdownの装飾( ```json ... ``` )を付けて返した場合に備えて除去する処理
       const cleanJson = responseText.replace(/```json\n?|```/g, '').trim();
       
       const data = JSON.parse(cleanJson || '{"ingredients":[]}');
       setAiSuggestions(data.ingredients.map((ing: any) => ({ ...ing, selected: true })));
     } catch (e: any) {
       console.error("AI予測失敗の詳細:", e);
-      alert(`食材の予測に失敗しました。\n原因: ${e.message || "不明なエラー"}\nコンソールログを確認してください。`);
+      alert(`食材の予測に失敗しました。\n\n${e.message || "不明なエラー"}`);
     } finally {
       setIsAiLoading(false);
     }
@@ -335,17 +346,20 @@ const ShoppingListView: React.FC<Props> = ({
             <div className="relative flex items-center gap-2">
               <div className="relative flex-1">
                 <input
+                  id={aiMode ? "ai-prompt-input" : "item-name-input"}
+                  name={aiMode ? "ai-prompt-input" : "item-name-input"}
                   type="text"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
-                  placeholder={aiMode ? "作りたいメニューと何人前か入力" : "何を買いますか？"}
+                  placeholder={aiMode ? "作りたい料理名を入力" : "何を買いますか？"}
                   className={`w-full pl-4 pr-10 py-3 rounded-2xl border-2 outline-none transition-all ${
-                    aiMode ? 'border-purple-100 focus:border-purple-300 bg-purple-50/20' : 'border-gray-100 focus:border-gray-200'
+                    aiMode ? 'border-purple-200 focus:border-purple-400 bg-purple-50/20' : 'border-gray-100 focus:border-gray-200'
                   }`}
                 />
                 <button
+                  type="button"
                   onClick={handleVoiceInput}
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors z-10 ${
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors z-30 pointer-events-auto ${
                     isListening 
                       ? 'text-red-500 animate-pulse bg-red-50' 
                       : (aiMode ? 'text-purple-400 hover:text-purple-600' : 'text-gray-400 hover:text-gray-600')
@@ -355,6 +369,7 @@ const ShoppingListView: React.FC<Props> = ({
                 </button>
               </div>
               <button
+                type="button"
                 onClick={handleAdd}
                 disabled={isAiLoading}
                 style={{ backgroundColor: aiMode ? '#a855f7' : themeColor }}
@@ -371,10 +386,12 @@ const ShoppingListView: React.FC<Props> = ({
             {!aiMode && (
               <div className="w-full">
                 <input
+                  id="item-quantity-input"
+                  name="item-quantity-input"
                   type="text"
                   value={quantityValue}
                   onChange={(e) => setQuantityValue(e.target.value)}
-                  placeholder="個数を入力（任意）"
+                  placeholder="個数/単位（任意）"
                   className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-50 focus:border-gray-100 bg-gray-50/30 outline-none transition-all text-sm"
                 />
               </div>
@@ -413,6 +430,8 @@ const ShoppingListView: React.FC<Props> = ({
                         <span className="text-sm font-bold text-gray-700 truncate block">{s.name}</span>
                       </div>
                       <input
+                        id={`ai-suggestion-qty-${idx}`}
+                        name={`ai-suggestion-qty-${idx}`}
                         type="text"
                         value={s.quantity}
                         onChange={(e) => updateAiSuggestionQuantity(idx, e.target.value)}
@@ -428,7 +447,7 @@ const ShoppingListView: React.FC<Props> = ({
                     <span className="text-[10px] font-bold text-gray-400">カードの色:</span>
                     {COLORS.map((color) => (
                       <button
-                        key={color.id}
+                        key={`ai-color-${color.id}`}
                         onClick={() => setAiSelectedColor(color.value)}
                         className={`w-6 h-6 rounded-full border-2 transition-all ${
                           aiSelectedColor === color.value ? 'scale-110 border-purple-400' : 'border-transparent'
@@ -438,6 +457,7 @@ const ShoppingListView: React.FC<Props> = ({
                     ))}
                   </div>
                   <button
+                    type="button"
                     onClick={addSelectedAiItems}
                     className="w-full py-3 bg-purple-600 text-white rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all"
                   >
@@ -484,6 +504,8 @@ const ShoppingListView: React.FC<Props> = ({
                 {editingQuantityId === item.id ? (
                   <div className="flex-1 flex gap-2 items-center" onClick={(e) => e.stopPropagation()}>
                     <input
+                      id={`edit-item-qty-${item.id}`}
+                      name={`edit-item-qty-${item.id}`}
                       autoFocus
                       type="text"
                       value={tempQuantity}
@@ -509,7 +531,6 @@ const ShoppingListView: React.FC<Props> = ({
               </div>
               
               <div className="flex items-center gap-1 shrink-0">
-                {/* Quantity edit button */}
                 <button 
                   onClick={(e) => { e.stopPropagation(); setEditingQuantityId(item.id); setTempQuantity(item.quantity || ''); }}
                   className="text-gray-300 hover:text-gray-500 p-2 transition-colors"
@@ -517,7 +538,6 @@ const ShoppingListView: React.FC<Props> = ({
                   <i className="fa-solid fa-pen-to-square text-sm"></i>
                 </button>
 
-                {/* Color Picker Toggle */}
                 <div className="relative">
                   <button 
                     onClick={(e) => { e.stopPropagation(); setEditingColorId(editingColorId === item.id ? null : item.id); }}
@@ -529,7 +549,7 @@ const ShoppingListView: React.FC<Props> = ({
                     <div className="absolute right-0 bottom-full mb-2 bg-white p-2 rounded-xl shadow-xl border border-gray-100 flex gap-2 z-20 animate-fadeIn" onClick={(e) => e.stopPropagation()}>
                       {COLORS.map((c) => (
                         <button
-                          key={c.id}
+                          key={`color-opt-${item.id}-${c.id}`}
                           onClick={() => { onUpdateColor(item.id, c.value); setEditingColorId(null); }}
                           className={`w-6 h-6 rounded-full border border-gray-100 shadow-sm ${item.color === c.value ? 'ring-2 ring-gray-400' : ''}`}
                           style={{ backgroundColor: c.value }}
@@ -563,7 +583,10 @@ const ShoppingListView: React.FC<Props> = ({
                 <>
                   <p className="text-[10px] text-gray-400 mb-4">初期状態（データなし）にリセットされます</p>
                   <input
+                    id="reset-pass-input"
+                    name="reset-pass-input"
                     type="password"
+                    autoComplete="off"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setPassError(false); }}
                     placeholder="パスワードを入力"

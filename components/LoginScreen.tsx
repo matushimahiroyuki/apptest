@@ -43,14 +43,17 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-3">
               <div className="flex justify-between items-center px-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                <label htmlFor="access-key" className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                   ACCESS KEY
                 </label>
                 <i className="fa-solid fa-shield-halved text-gray-200 text-xs"></i>
               </div>
               <input
+                id="access-key"
+                name="access-key"
                 type="password"
                 inputMode="numeric"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
