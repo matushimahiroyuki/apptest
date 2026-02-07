@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import Sortable from 'https://esm.sh/sortablejs@1.15.2';
+import Sortable from 'sortablejs';
 import { ShoppingItem, LocationId, HistoryItem } from '../types';
 import MasterListModal from './MasterListModal';
 import { GoogleGenAI, Type } from "@google/genai";

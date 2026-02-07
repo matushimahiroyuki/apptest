@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState } from 'react';
-import Sortable from 'https://esm.sh/sortablejs@1.15.2';
+import Sortable from 'sortablejs';
 import { HistoryItem } from '../types';
 
 interface Props {

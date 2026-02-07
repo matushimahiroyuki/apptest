@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, 
   doc, 
   onSnapshot, 
   setDoc, 
   enableIndexedDbPersistence 
-} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+} from 'firebase/firestore';
 import { LocationId, ShoppingItem, AppState, HistoryItem } from './types';
 import LocationSelector from './components/LocationSelector';
 import ShoppingListView from './components/ShoppingListView';
