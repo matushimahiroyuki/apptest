@@ -154,6 +154,10 @@ const ShoppingListView: React.FC<Props> = ({
     setAiSuggestions([]);
     
     try {
+      if (!process.env.API_KEY) {
+        throw new Error("APIキーが設定されていません。Vercelの環境変数を確認してください。");
+      }
+
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -180,11 +184,15 @@ const ShoppingListView: React.FC<Props> = ({
         }
       });
 
-      const data = JSON.parse(response.text || '{"ingredients":[]}');
+      const responseText = response.text || '';
+      // AIがMarkdownの装飾( ```json ... ``` )を付けて返した場合に備えて除去する処理
+      const cleanJson = responseText.replace(/```json\n?|```/g, '').trim();
+      
+      const data = JSON.parse(cleanJson || '{"ingredients":[]}');
       setAiSuggestions(data.ingredients.map((ing: any) => ({ ...ing, selected: true })));
-    } catch (e) {
-      console.error("AI予測失敗:", e);
-      alert("食材の予測に失敗しました。時間をおいて再度お試しください。");
+    } catch (e: any) {
+      console.error("AI予測失敗の詳細:", e);
+      alert(`食材の予測に失敗しました。\n原因: ${e.message || "不明なエラー"}\nコンソールログを確認してください。`);
     } finally {
       setIsAiLoading(false);
     }
