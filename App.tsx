@@ -1,22 +1,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
-import { 
-  getFirestore, 
-  doc, 
-  onSnapshot, 
-  setDoc, 
-  enableIndexedDbPersistence 
-} from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, setDoc, enableIndexedDbPersistence } from 'firebase/firestore';
 import { LocationId, ShoppingItem, AppState, HistoryItem } from './types';
 import LocationSelector from './components/LocationSelector';
 import ShoppingListView from './components/ShoppingListView';
 import LoginScreen from './components/LoginScreen';
 
-/**
- * 【Firebase設定の貼り付け手順】
- * Firebaseコンソールで取得した config の内容を下の {} 内に上書きしてください。
- */
 const firebaseConfig = {
   apiKey: "ここに貼り付け",
   authDomain: "ここに貼り付け",
@@ -26,31 +16,23 @@ const firebaseConfig = {
   appId: "ここに貼り付け"
 };
 
-// Firebaseの初期化
 let db: any = null;
 try {
   if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "ここに貼り付け") {
     const app = initializeApp(firebaseConfig);
     db = getFirestore(app);
-    
     enableIndexedDbPersistence(db).catch((err: any) => {
-      if (err.code === 'failed-precondition') {
-        console.warn("複数タブが開かれているため、オフライン保存は1つのタブのみで有効です。");
-      } else if (err.code === 'unimplemented') {
-        console.warn("現在のブラウザはオフライン保存をサポートしていません。");
-      }
+      console.warn("オフライン保存の有効化に失敗:", err.code);
     });
   }
 } catch (e) {
   console.error("Firebase初期化エラー:", e);
 }
 
-const STORAGE_KEY = 'slow_life_shopping_data_v2';
-const AUTH_KEY = 'slow_life_auth_v2';
+const STORAGE_KEY = 'slow_life_auth_v2';
 const SHARED_DOC_ID = 'company_8349';
 
-// 【プロトタイプ１】としての初期状態定義
-const PROTOTYPE_1_STATE: AppState = {
+const PROTOTYPE_2_STATE: AppState = {
   currentLocation: null,
   lists: {
     slowlife1: [],
@@ -61,283 +43,201 @@ const PROTOTYPE_1_STATE: AppState = {
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem(AUTH_KEY) === 'true';
+    return localStorage.getItem(STORAGE_KEY) === 'true';
   });
 
-  const [state, setState] = useState<AppState>(PROTOTYPE_1_STATE);
+  const [state, setState] = useState<AppState>(PROTOTYPE_2_STATE);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // クラウドへデータを保存する関数
-  const syncToCloud = async (newState: AppState) => {
-    if (!db) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
-      return;
-    }
-    
+  const syncToCloud = useCallback(async (newState: AppState) => {
+    if (!db) return;
     setIsSyncing(true);
     try {
       const { currentLocation, ...dataToSync } = newState;
       await setDoc(doc(db, "shopping_lists", SHARED_DOC_ID), dataToSync);
     } catch (e) {
-      console.error("クラウド保存失敗:", e);
+      console.error("保存失敗:", e);
     } finally {
       setIsSyncing(false);
     }
-  };
+  }, []);
 
-  // クラウドから最新データを受け取る
   useEffect(() => {
     if (!db || !isLoggedIn) return;
-
     setIsSyncing(true);
     const unsub = onSnapshot(doc(db, "shopping_lists", SHARED_DOC_ID), (docSnap) => {
       if (docSnap.exists()) {
         const cloudData = docSnap.data() as any;
-        
-        const sanitizedHistory = (cloudData.masterHistory || []).map((h: any) => 
-          typeof h === 'string' ? { name: h, color: '#ffffff' } : h
-        );
-
         setState(prev => ({
           ...cloudData,
-          masterHistory: sanitizedHistory,
           currentLocation: prev.currentLocation
         }));
       } else {
-        syncToCloud(PROTOTYPE_1_STATE);
+        syncToCloud(PROTOTYPE_2_STATE);
       }
       setIsSyncing(false);
     }, (error) => {
       console.error("同期エラー:", error);
       setIsSyncing(false);
     });
-
     return () => unsub();
-  }, [isLoggedIn]);
+  }, [isLoggedIn, syncToCloud]);
 
   const handleLogin = () => {
     setIsLoggedIn(true);
-    localStorage.setItem(AUTH_KEY, 'true');
+    localStorage.setItem(STORAGE_KEY, 'true');
   };
 
   const setLocation = (location: LocationId | null) => {
     setState(prev => ({ ...prev, currentLocation: location }));
   };
 
-  const addItem = useCallback((name: string, color: string = '#ffffff', quantity: string = '') => {
-    setState(prev => {
-      const { currentLocation } = prev;
-      if (!currentLocation || !name.trim()) return prev;
+  // 複数アイテムを一括追加するためのメイン関数
+  const addItems = useCallback((itemsData: { name: string; color?: string; quantity?: string }[]) => {
+    if (!state.currentLocation) return;
+    const loc = state.currentLocation;
 
-      const trimmedName = name.trim();
-      const newItem: ShoppingItem = {
+    const newShoppingItems: ShoppingItem[] = itemsData
+      .filter(d => d.name.trim() !== "")
+      .map(d => ({
         id: crypto.randomUUID(),
-        name: trimmedName,
+        name: d.name.trim(),
         completed: false,
         createdAt: Date.now(),
-        color: color,
-        quantity: quantity,
-      };
+        color: d.color || '#ffffff',
+        quantity: d.quantity || '',
+      }));
 
-      const newHistory: HistoryItem[] = [
-        { name: trimmedName, color },
-        ...prev.masterHistory.filter(h => h.name !== trimmedName)
-      ].slice(0, 100);
+    if (newShoppingItems.length === 0) return;
 
-      const newState = {
-        ...prev,
-        lists: {
-          ...prev.lists,
-          [currentLocation]: [newItem, ...prev.lists[currentLocation]],
-        },
-        masterHistory: newHistory,
-      };
-      
-      syncToCloud(newState);
-      return newState;
+    // 履歴の更新ロジック（追加されたものをすべて先頭に持ってくる）
+    let nextHistory = [...state.masterHistory];
+    newShoppingItems.forEach(item => {
+      nextHistory = [
+        { name: item.name, color: item.color },
+        ...nextHistory.filter(h => h.name !== item.name)
+      ];
     });
-  }, []);
+    nextHistory = nextHistory.slice(0, 100);
+
+    const newState = {
+      ...state,
+      lists: {
+        ...state.lists,
+        [loc]: [...newShoppingItems, ...(state.lists[loc] || [])],
+      },
+      masterHistory: nextHistory,
+    };
+    
+    setState(newState);
+    syncToCloud(newState);
+  }, [state, syncToCloud]);
+
+  // 単一追加も一括追加の仕組みを利用するように統一
+  const addItem = useCallback((name: string, color: string = '#ffffff', quantity: string = '') => {
+    addItems([{ name, color, quantity }]);
+  }, [addItems]);
+
+  const updateItem = useCallback((id: string, updates: Partial<ShoppingItem>) => {
+    if (!state.currentLocation) return;
+
+    const newState = {
+      ...state,
+      lists: {
+        ...state.lists,
+        [state.currentLocation]: state.lists[state.currentLocation].map(item =>
+          item.id === id ? { ...item, ...updates } : item
+        ),
+      },
+    };
+    setState(newState);
+    syncToCloud(newState);
+  }, [state, syncToCloud]);
 
   const toggleItem = (id: string) => {
-    setState(prev => {
-      const { currentLocation } = prev;
-      if (!currentLocation) return prev;
-
-      const newState = {
-        ...prev,
-        lists: {
-          ...prev.lists,
-          [currentLocation]: prev.lists[currentLocation].map(item =>
-            item.id === id ? { ...item, completed: !item.completed } : item
-          ),
-        },
-      };
-      syncToCloud(newState);
-      return newState;
-    });
-  };
-
-  const updateItemColor = (id: string, color: string) => {
-    setState(prev => {
-      const { currentLocation } = prev;
-      if (!currentLocation) return prev;
-
-      const newState = {
-        ...prev,
-        lists: {
-          ...prev.lists,
-          [currentLocation]: prev.lists[currentLocation].map(item =>
-            item.id === id ? { ...item, color } : item
-          ),
-        },
-      };
-      syncToCloud(newState);
-      return newState;
-    });
-  };
-
-  const updateItemQuantity = (id: string, quantity: string) => {
-    setState(prev => {
-      const { currentLocation } = prev;
-      if (!currentLocation) return prev;
-
-      const newState = {
-        ...prev,
-        lists: {
-          ...prev.lists,
-          [currentLocation]: prev.lists[currentLocation].map(item =>
-            item.id === id ? { ...item, quantity } : item
-          ),
-        },
-      };
-      syncToCloud(newState);
-      return newState;
-    });
+    if (!state.currentLocation) return;
+    const item = state.lists[state.currentLocation].find(i => i.id === id);
+    if (item) {
+      updateItem(id, { completed: !item.completed });
+    }
   };
 
   const deleteItem = (id: string) => {
-    setState(prev => {
-      const { currentLocation } = prev;
-      if (!currentLocation) return prev;
-
-      const newState = {
-        ...prev,
-        lists: {
-          ...prev.lists,
-          [currentLocation]: prev.lists[currentLocation].filter(item => item.id !== id),
-        },
-      };
-      syncToCloud(newState);
-      return newState;
-    });
+    if (!state.currentLocation) return;
+    const newState = {
+      ...state,
+      lists: {
+        ...state.lists,
+        [state.currentLocation]: state.lists[state.currentLocation].filter(item => item.id !== id),
+      },
+    };
+    setState(newState);
+    syncToCloud(newState);
   };
 
-  const updateListOrder = useCallback((items: ShoppingItem[]) => {
-    setState(prev => {
-      if (!prev.currentLocation) return prev;
-      const newState = {
-        ...prev,
-        lists: {
-          ...prev.lists,
-          [prev.currentLocation]: items,
-        },
-      };
-      syncToCloud(newState);
-      return newState;
-    });
-  }, []);
+  const updateOrder = useCallback((items: ShoppingItem[]) => {
+    if (!state.currentLocation) return;
+    const newState = {
+      ...state,
+      lists: { ...state.lists, [state.currentLocation]: items },
+    };
+    setState(newState);
+    syncToCloud(newState);
+  }, [state, syncToCloud]);
 
   const updateHistoryOrder = useCallback((newHistory: HistoryItem[]) => {
-    setState(prev => {
-      const newState = {
-        ...prev,
-        masterHistory: newHistory,
-      };
-      syncToCloud(newState);
-      return newState;
-    });
-  }, []);
+    const newState = { ...state, masterHistory: newHistory };
+    setState(newState);
+    syncToCloud(newState);
+  }, [state, syncToCloud]);
 
   const resetList = useCallback(() => {
-    setState(prev => {
-      const { currentLocation } = prev;
-      if (!currentLocation) return prev;
-      const newState = {
-        ...prev,
-        lists: {
-          ...prev.lists,
-          [currentLocation]: [],
-        },
-      };
-      syncToCloud(newState);
-      return newState;
-    });
-  }, []);
-
-  // 履歴リストをすべて削除する関数
-  const resetHistory = useCallback(() => {
-    setState(prev => {
-      const newState = {
-        ...prev,
-        masterHistory: [], // 履歴を完全に空にする
-      };
-      syncToCloud(newState);
-      return newState;
-    });
-  }, []);
+    const loc = state.currentLocation;
+    if (!loc || !state.lists[loc] || state.lists[loc].length === 0) return;
+    
+    const newState = {
+      ...state,
+      lists: {
+        ...state.lists,
+        [loc]: [],
+      },
+    };
+    setState(newState);
+    syncToCloud(newState);
+  }, [state, syncToCloud]);
 
   const deleteHistoryItem = useCallback((name: string) => {
-    setState(prev => {
-      const newState = {
-        ...prev,
-        masterHistory: prev.masterHistory.filter(h => h.name !== name),
-      };
-      syncToCloud(newState);
-      return newState;
-    });
-  }, []);
-
-  // アプリを【プロトタイプ１】の初期状態に戻す関数
-  const resetToPrototype1 = useCallback(async () => {
-    await syncToCloud(PROTOTYPE_1_STATE);
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(AUTH_KEY);
-    setState(PROTOTYPE_1_STATE);
-    setIsLoggedIn(false);
-  }, []);
+    const newState = {
+      ...state,
+      masterHistory: state.masterHistory.filter(h => h.name !== name),
+    };
+    setState(newState);
+    syncToCloud(newState);
+  }, [state, syncToCloud]);
 
   if (!isLoggedIn) {
-    return (
-      <div className="min-h-screen max-w-md mx-auto bg-[#fdfaf6] text-[#4a3f35] shadow-xl flex flex-col relative overflow-hidden">
-        <LoginScreen onLogin={handleLogin} />
-      </div>
-    );
+    return <LoginScreen onLogin={handleLogin} />;
   }
 
   return (
     <div className="min-h-screen max-w-md mx-auto bg-[#fdfaf6] text-[#4a3f35] shadow-xl flex flex-col relative overflow-hidden">
       {!state.currentLocation ? (
-        <LocationSelector 
-          onSelect={setLocation} 
-          onResetApp={resetToPrototype1} 
-        />
+        <LocationSelector onSelect={setLocation} />
       ) : (
         <ShoppingListView
           locationId={state.currentLocation}
-          items={state.lists[state.currentLocation]}
-          masterHistory={state.masterHistory}
+          items={state.lists[state.currentLocation] || []}
+          masterHistory={state.masterHistory || []}
           isSyncing={isSyncing}
           onBack={() => setLocation(null)}
           onAdd={addItem}
+          onAddMany={addItems}
+          onUpdateItem={updateItem}
           onToggle={toggleItem}
-          onUpdateColor={updateItemColor}
-          onUpdateQuantity={updateItemQuantity}
           onDelete={deleteItem}
-          onUpdateOrder={updateListOrder}
+          onUpdateOrder={updateOrder}
           onUpdateHistoryOrder={updateHistoryOrder}
           onReset={resetList}
-          onResetHistory={resetHistory}
-          onResetApp={resetToPrototype1}
           onDeleteHistoryItem={deleteHistoryItem}
         />
       )}
