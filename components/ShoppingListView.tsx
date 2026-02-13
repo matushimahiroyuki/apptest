@@ -67,11 +67,23 @@ const ShoppingListView: React.FC<Props> = ({
   useEffect(() => {
     if (listRef.current && items.length > 0) {
       sortableRef.current = new Sortable(listRef.current, {
-        animation: 150,
-        ghostClass: 'opacity-20',
-        delay: 100,
+        animation: 250, // 少しゆっくりにして動きを滑らかに
         handle: '.drag-handle',
+        delay: 150, // タップとドラッグの誤爆防止
         delayOnTouchOnly: true,
+        touchStartThreshold: 5, // 5px動いたらドラッグとみなす
+        
+        // モバイルSafari向けの重要設定
+        forceFallback: true, // ブラウザ標準のドラッグを使わずエミュレートする
+        fallbackClass: 'sortable-fallback',
+        fallbackOnBody: true,
+        swapThreshold: 0.65,
+        
+        // クラス設定
+        ghostClass: 'sortable-ghost', // 移動先のプレースホルダー
+        chosenClass: 'sortable-chosen', // 掴んでいる最中のアイテム
+        dragClass: 'sortable-drag', // 実際に引きずっているアイテムのコピー
+        
         onEnd: (evt: any) => {
           const newItems = [...items];
           const [movedItem] = newItems.splice(evt.oldIndex, 1);
@@ -183,17 +195,7 @@ const ShoppingListView: React.FC<Props> = ({
       </header>
 
       <div className="p-6 bg-white shadow-sm space-y-4">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex gap-4">
-            {COLORS.map((color) => (
-              <button
-                key={color.id}
-                onClick={() => setSelectedColor(color.value)}
-                className={`w-7 h-7 rounded-full border-2 transition-all ${selectedColor === color.value ? 'scale-110 border-gray-400' : 'border-transparent'}`}
-                style={{ backgroundColor: color.value }}
-              />
-            ))}
-          </div>
+        <div className="flex justify-end px-1">
           <button 
             onClick={() => { setAiMode(!aiMode); setAiSuggestions([]); setInputValue(''); }}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all border-2 ${aiMode ? 'bg-purple-500 border-purple-500 text-white' : 'text-gray-400 border-gray-100'}`}
@@ -216,14 +218,6 @@ const ShoppingListView: React.FC<Props> = ({
                 <i className="fa-solid fa-microphone"></i>
               </button>
             </div>
-            <button
-              onClick={handleAdd}
-              disabled={isAiLoading}
-              style={{ backgroundColor: aiMode ? '#a855f7' : themeColor }}
-              className="w-12 h-12 rounded-2xl text-white flex items-center justify-center shadow-lg active:scale-90 transition-all shrink-0"
-            >
-              {isAiLoading ? <i className="fa-solid fa-circle-notch animate-spin"></i> : <i className={`fa-solid ${aiMode ? 'fa-magnifying-glass' : 'fa-plus'}`}></i>}
-            </button>
           </div>
           {!aiMode && (
             <input
@@ -250,7 +244,9 @@ const ShoppingListView: React.FC<Props> = ({
                 ))}
               </div>
               <button onClick={() => { 
-                const selectedOnes = aiSuggestions.filter(s => s.selected).map(i => ({ name: i.name, color: '#ffffff', quantity: i.quantity }));
+                const selectedOnes = aiSuggestions
+                  .filter(s => s.selected)
+                  .map(i => ({ name: i.name, color: selectedColor, quantity: i.quantity }));
                 onAddMany(selectedOnes);
                 setAiSuggestions([]); 
                 setInputValue(''); 
@@ -263,12 +259,34 @@ const ShoppingListView: React.FC<Props> = ({
             </div>
           )}
         </div>
+
+        <div className="flex items-center justify-between">
+          <div className="flex gap-4">
+            {COLORS.map((color) => (
+              <button
+                key={color.id}
+                onClick={() => setSelectedColor(color.value)}
+                className={`w-7 h-7 rounded-full border-2 transition-all ${selectedColor === color.value ? 'scale-110 border-gray-400' : 'border-transparent'}`}
+                style={{ backgroundColor: color.value }}
+              />
+            ))}
+          </div>
+          <button
+            onClick={handleAdd}
+            disabled={isAiLoading}
+            style={{ backgroundColor: aiMode ? '#a855f7' : themeColor }}
+            className="w-12 h-12 rounded-2xl text-white flex items-center justify-center shadow-lg active:scale-90 transition-all shrink-0"
+          >
+            {isAiLoading ? <i className="fa-solid fa-circle-notch animate-spin"></i> : <i className={`fa-solid ${aiMode ? 'fa-magnifying-glass' : 'fa-plus'}`}></i>}
+          </button>
+        </div>
+
         <button onClick={() => setShowHistory(true)} className="w-full py-2.5 bg-gray-50 text-gray-400 rounded-xl text-xs font-bold border border-gray-100">
           <i className="fa-solid fa-clock-rotate-left mr-2"></i>履歴から追加
         </button>
       </div>
 
-      <div ref={listRef} className="flex-1 overflow-y-auto p-6 space-y-3 pb-24">
+      <div ref={listRef} className="flex-1 overflow-y-auto p-6 space-y-3 pb-24 touch-pan-y">
         {isListEmpty ? (
           <div className="flex flex-col items-center justify-center h-40 text-gray-200 opacity-50">
             <i className="fa-solid fa-basket-shopping text-4xl mb-4"></i>
@@ -276,9 +294,11 @@ const ShoppingListView: React.FC<Props> = ({
           </div>
         ) : (
           items.map((item) => (
-            <div key={item.id} className="flex flex-col gap-2 p-4 rounded-3xl shadow-sm border border-gray-100 transition-all" style={{ backgroundColor: item.color }}>
+            <div key={item.id} className="shopping-item-card flex flex-col gap-2 p-4 rounded-3xl shadow-sm border border-gray-100 transition-all duration-200" style={{ backgroundColor: item.color }}>
               <div className="flex items-center gap-3">
-                <div className="drag-handle text-gray-300 p-1 cursor-grab active:cursor-grabbing"><i className="fa-solid fa-grip-vertical"></i></div>
+                <div className="drag-handle text-gray-300 p-2 cursor-grab active:cursor-grabbing">
+                  <i className="fa-solid fa-grip-vertical"></i>
+                </div>
                 <button 
                   onClick={(e) => { e.stopPropagation(); onToggle(item.id); }} 
                   className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${item.completed ? 'bg-green-500 border-green-500 text-white' : 'border-gray-200 text-transparent'}`}
@@ -348,6 +368,37 @@ const ShoppingListView: React.FC<Props> = ({
           onClose={() => setShowHistory(false)} 
         />
       )}
+
+      <style>{`
+        /* ドラッグ中の視覚効果 */
+        .sortable-chosen {
+          opacity: 0.5;
+          transform: scale(1.02);
+          box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important;
+          z-index: 100;
+        }
+        
+        /* 移動先のプレースホルダー（隙間） */
+        .sortable-ghost {
+          opacity: 0.2 !important;
+          background: #e2e8f0 !important;
+          border: 2px dashed #94a3b8 !important;
+          visibility: visible !important;
+        }
+
+        /* 実際に指の下で動いているアイテム */
+        .sortable-drag {
+          opacity: 0.9 !important;
+          transform: scale(1.05) rotate(2deg) !important;
+          box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25) !important;
+          cursor: grabbing !important;
+        }
+        
+        /* iOS Safariでのスクロールとの干渉を抑える */
+        .shopping-item-card {
+          touch-action: none;
+        }
+      `}</style>
     </div>
   );
 };
