@@ -1,5 +1,7 @@
 
 import React, { useState } from 'react';
+import { signInWithPopup } from 'firebase/auth';
+import { auth, googleProvider } from '../firebase';
 
 interface Props {
   onLogin: () => void;
@@ -8,11 +10,27 @@ interface Props {
 const LoginScreen: React.FC<Props> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+      onLogin();
+    } catch (e) {
+      console.error("Login Error:", e);
+      setError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (password === '8349') {
-      onLogin();
+      // For legacy support or if they just want to enter the portal
+      // But real auth is better. We'll still need them to sign in with Google for Firestore rules.
+      alert("Please use Google Login for secure data access.");
     } else {
       setError(true);
       setPassword('');
@@ -39,12 +57,27 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
         </div>
 
         {/* Form Section */}
-        <div className="bg-white p-6 rounded-[32px] shadow-lg shadow-gray-200/50 border border-gray-50">
+        <div className="bg-white p-6 rounded-[32px] shadow-lg shadow-gray-200/50 border border-gray-50 space-y-4">
+          <button
+            onClick={handleGoogleLogin}
+            disabled={isLoading}
+            className="w-full py-4 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 rounded-2xl font-bold text-sm shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-3 group"
+          >
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+            Googleでログイン
+          </button>
+
+          <div className="relative flex items-center py-2">
+            <div className="flex-grow border-t border-gray-100"></div>
+            <span className="flex-shrink mx-4 text-[10px] text-gray-300 font-bold">OR</span>
+            <div className="flex-grow border-t border-gray-100"></div>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-3">
               <div className="flex justify-between items-center px-2">
                 <label htmlFor="access-key" className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                  ACCESS KEY
+                  ACCESS KEY (Legacy)
                 </label>
                 <i className="fa-solid fa-shield-halved text-gray-200 text-xs"></i>
               </div>

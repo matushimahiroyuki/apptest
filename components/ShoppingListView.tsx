@@ -67,22 +67,20 @@ const ShoppingListView: React.FC<Props> = ({
   useEffect(() => {
     if (listRef.current && items.length > 0) {
       sortableRef.current = new Sortable(listRef.current, {
-        animation: 250, // 少しゆっくりにして動きを滑らかに
+        animation: 250, 
         handle: '.drag-handle',
-        delay: 150, // タップとドラッグの誤爆防止
+        delay: 150, 
         delayOnTouchOnly: true,
-        touchStartThreshold: 5, // 5px動いたらドラッグとみなす
+        touchStartThreshold: 5, 
         
-        // モバイルSafari向けの重要設定
-        forceFallback: true, // ブラウザ標準のドラッグを使わずエミュレートする
+        forceFallback: true, 
         fallbackClass: 'sortable-fallback',
         fallbackOnBody: true,
         swapThreshold: 0.65,
         
-        // クラス設定
-        ghostClass: 'sortable-ghost', // 移動先のプレースホルダー
-        chosenClass: 'sortable-chosen', // 掴んでいる最中のアイテム
-        dragClass: 'sortable-drag', // 実際に引きずっているアイテムのコピー
+        ghostClass: 'sortable-ghost', 
+        chosenClass: 'sortable-chosen', 
+        dragClass: 'sortable-drag', 
         
         onEnd: (evt: any) => {
           const newItems = [...items];
@@ -305,11 +303,13 @@ const ShoppingListView: React.FC<Props> = ({
                 >
                   <i className="fa-solid fa-check text-xs"></i>
                 </button>
-                <div className="flex-1 overflow-hidden" onClick={() => !item.completed && setEditingId(editingId === item.id ? null : item.id)}>
-                  <div className="flex items-baseline gap-2">
-                    <span className={`text-[15px] font-bold truncate ${item.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{item.name}</span>
+                <div className="flex-1" onClick={() => !item.completed && setEditingId(editingId === item.id ? null : item.id)}>
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className={`text-[15px] font-bold break-words whitespace-normal leading-tight ${item.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                      {item.name}
+                    </span>
                     {item.quantity && (
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm transition-all ${
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm transition-all whitespace-nowrap ${
                         item.completed 
                           ? 'line-through text-gray-300 bg-white/20' 
                           : 'text-gray-500 bg-white/60'
@@ -319,7 +319,7 @@ const ShoppingListView: React.FC<Props> = ({
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 shrink-0">
                   {!item.completed && (
                     <button onClick={() => setEditingId(editingId === item.id ? null : item.id)} className={`p-2 transition-colors ${editingId === item.id ? 'text-gray-600' : 'text-gray-300'}`}>
                       <i className="fa-solid fa-pen-to-square text-sm"></i>
