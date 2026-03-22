@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "ShoppingItem": {
+      "title": "ShoppingItem",
+      "description": "An item in a shopping list",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the item" },
+        "completed": { "type": "boolean", "description": "Whether the item is completed" },
+        "createdAt": { "type": "number", "description": "Timestamp when the item was created" },
+        "color": { "type": "string", "description": "Hex color code for the item" },
+        "quantity": { "type": "string", "description": "Quantity of the item" },
+        "uid": { "type": "string", "description": "User ID who created the item" }
+      },
+      "required": ["name", "completed", "createdAt", "color", "uid"]
+    },
+    "HistoryItem": {
+      "title": "HistoryItem",
+      "description": "A master history item for quick selection",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the item" },
+        "color": { "type": "string", "description": "Hex color code for the item" },
+        "lastUsedAt": { "type": "number", "description": "Timestamp when the item was last used" },
+        "uid": { "type": "string", "description": "User ID who added this to history" }
+      },
+      "required": ["name", "color", "lastUsedAt", "uid"]
+    },
+    "Location": {
+      "title": "Location",
+      "description": "A shopping location",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the location" }
+      },
+      "required": ["name"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user profile",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "uid": { "type": "string" }
+      },
+      "required": ["displayName", "email", "role", "uid"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile and role"
+    },
+    "/locations/{locationId}": {
+      "schema": "Location",
+      "description": "Metadata for a location"
+    },
+    "/locations/{locationId}/items/{itemId}": {
+      "schema": "ShoppingItem",
+      "description": "Items in a specific location's shopping list"
+    },
+    "/master_history/{historyId}": {
+      "schema": "HistoryItem",
+      "description": "Global master history of items"
+    }
+  }
+}
